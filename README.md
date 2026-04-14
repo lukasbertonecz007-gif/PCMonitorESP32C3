@@ -1,32 +1,32 @@
 # PC Monitor (ESP32-C3 + ILI9341 + LibreHardwareMonitor)
 
-Projekt ma 2 casti:
+Projekt má 2 části:
 
-- `PcMonitorHost/`: Windows aplikace (WinForms), cte telemetrii a posila ji pres COM do ESP32.
-- `Pc monitor.ino`: firmware pro ESP32-C3, prijima packet `DATA;...` a kresli dashboard na ILI9341.
+- `PcMonitorHost/`: Windows aplikace (WinForms), čte telemetrii a posílá ji přes COM do ESP32.
+- `Pc monitor.ino`: firmware pro ESP32-C3, přijímá packet `DATA;...` a kreslí dashboard na ILI9341.
 
-## 1) Co to umi
+## 1) Co to umí
 
 - CPU load + CPU teplota
 - GPU load + GPU teplota
 - RAM usage
-- sit `download/upload`
-- vyuziti disku
-- odhad spotreby PC
-- sleep displeje pri vypnutem monitoru
-- tray rezim, nastaveni jazyka, startup s Windows
-- debug tlacitka `Test probuzeni` a `Test alert`
-- overload alert pri vysokem CPU + GPU load
+- síť `download/upload`
+- využití disku
+- odhad spotřeby PC
+- sleep displeje při vypnutém monitoru
+- tray režim, nastavení jazyka, startup s Windows
+- debug tlačítka `Test probuzení` a `Test alert`
+- overload alert při vysokém CPU + GPU load
 
 ## 2) Host aplikace (Windows)
 
-### Pozadavky
+### Požadavky
 
 - Windows
-- .NET 8 SDK nebo hotovy EXE build
-- pro presnejsi teploty je vhodne spoustet aplikaci jako Administrator
+- .NET 8 SDK nebo hotový EXE build
+- pro přesnější teploty je vhodné spouštět aplikaci jako Administrator
 
-### Spusteni ze zdrojaku
+### Spuštění ze zdrojáku
 
 ```powershell
 dotnet run --project PcMonitorHost
@@ -38,54 +38,54 @@ dotnet run --project PcMonitorHost
 dotnet publish "PcMonitorHost\\PcMonitorHost.csproj" -c Release -r win-x64 -p:PublishSingleFile=true -p:SelfContained=true -o ".\\PcMonitorHost_EXE"
 ```
 
-Vysledny soubor:
+Výsledný soubor:
 
 - `PcMonitorHost_EXE\\PcMonitorHost.exe`
 
-### Co spousti aplikaci
+### Co spouští aplikaci
 
 Entry point je:
 
 - `PcMonitorHost/Program.cs`
 
-Hlavni okno:
+Hlavní okno:
 
 - `PcMonitorHost/MainForm.cs`
 
-### Pouziti
+### Použití
 
 1. Vyber COM port ESP32.
-2. Nech baud `115200`, pokud jsi ho nemenil i ve firmware.
-3. Klikni `Pripojit`.
-4. V nastaveni muzes zapnout:
+2. Nech baud `115200`, pokud jsi ho neměnil i ve firmware.
+3. Klikni `Připojit`.
+4. V nastavení můžeš zapnout:
    - start s Windows
-   - vychozi COM
+   - výchozí COM
    - jazyk
-   - sleep ESP displeje pri vypnutem monitoru
+   - sleep ESP displeje při vypnutém monitoru
    - auto reconnect
-   - low power pri neaktivite
+   - low power při neaktivitě
 
-### Debug tlacitka
+### Debug tlačítka
 
-- `Test probuzeni`: nasimuluje sleep/wake cyklus displeje
-- `Test alert`: posle jednorazovy trigger overload alertu do ESP
+- `Test probuzení`: nasimuluje sleep/wake cyklus displeje
+- `Test alert`: pošle jednorazový trigger overload alertu do ESP
 
 ## 3) ESP32-C3 firmware
 
-### Pozadavky (Arduino IDE / arduino-cli)
+### Požadavky (Arduino IDE / arduino-cli)
 
 - board package: `ESP32 by Espressif`
 - board: `esp32:esp32:nologo_esp32c3_super_mini`
 - knihovna:
   - `LovyanGFX`
 
-Poznamka:
+Poznámka:
 
-- stare instrukce s `Adafruit_GFX` a `Adafruit_ILI9341` uz pro tenhle firmware neplati
+- staré instrukce s `Adafruit_GFX` a `Adafruit_ILI9341` už pro tenhle firmware neplatí
 
-### Zapojeni ILI9341 -> ESP32-C3 Super Mini
+### Zapojení ILI9341 -> ESP32-C3 Super Mini
 
-Aktualni mapovani odpovida `Pc monitor.ino`.
+Aktuální mapování odpovídá `Pc monitor.ino`.
 
 | ILI9341 pin | ESP32-C3 Super Mini pin |
 | --- | --- |
