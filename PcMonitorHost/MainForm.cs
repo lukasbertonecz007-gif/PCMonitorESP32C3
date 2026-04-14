@@ -10,12 +10,17 @@ namespace PcMonitorHost;
 
 internal sealed class MainForm : Form
 {
-    private static readonly Color WindowBack = Color.FromArgb(24, 24, 24);
-    private static readonly Color PanelBack = Color.FromArgb(32, 32, 32);
-    private static readonly Color InputBack = Color.FromArgb(44, 44, 44);
-    private static readonly Color ForeText = Color.FromArgb(230, 230, 230);
-    private static readonly Color AccentText = Color.FromArgb(120, 220, 140);
+    private static readonly Color WindowBack = Color.FromArgb(20, 20, 22);
+    private static readonly Color PanelBack = Color.FromArgb(28, 28, 32);
+    private static readonly Color SectionBack = Color.FromArgb(32, 32, 38);
+    private static readonly Color InputBack = Color.FromArgb(45, 45, 52);
+    private static readonly Color InputBorder = Color.FromArgb(70, 70, 80);
+    private static readonly Color ForeText = Color.FromArgb(240, 240, 245);
+    private static readonly Color SecondaryText = Color.FromArgb(160, 160, 170);
+    private static readonly Color AccentColor = Color.FromArgb(100, 200, 255);
+    private static readonly Color AccentGreen = Color.FromArgb(100, 220, 150);
     private static readonly Color ErrorText = Color.FromArgb(255, 120, 120);
+    private static readonly Color SuccessText = Color.FromArgb(120, 200, 120);
 
     private readonly Label _portLabel = new() { AutoSize = true, Padding = new Padding(0, 7, 0, 0) };
     private readonly Label _baudLabel = new() { AutoSize = true, Padding = new Padding(14, 7, 0, 0) };
@@ -346,7 +351,7 @@ internal sealed class MainForm : Form
             Dock = DockStyle.Fill,
             ColumnCount = 1,
             RowCount = 4,
-            Padding = new Padding(10)
+            Padding = new Padding(12, 12, 12, 12)
         };
 
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -354,97 +359,179 @@ internal sealed class MainForm : Form
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
-        root.Controls.Add(BuildTopControls(), 0, 0);
-        root.Controls.Add(BuildSettingsControls(), 0, 1);
+        root.Controls.Add(BuildConnectionSection(), 0, 0);
+        root.Controls.Add(BuildSettingsSection(), 0, 1);
         root.Controls.Add(BuildContentArea(), 0, 2);
         root.Controls.Add(BuildStatusBar(), 0, 3);
 
         Controls.Add(root);
     }
 
-    private Control BuildTopControls()
+    private Control BuildConnectionSection()
     {
-        var panel = new TableLayoutPanel
+        // Vizuální sekce pro připojení
+        var panel = new Panel
         {
             Dock = DockStyle.Fill,
             AutoSize = true,
-            ColumnCount = 9,
-            RowCount = 1,
-            Margin = new Padding(0)
+            BackColor = SectionBack,
+            Margin = new Padding(0, 0, 0, 8)
         };
 
-        // Set column widths: label (90px), combo (120px), label (90px), input (100px), etc.
-        for (int i = 0; i < 9; i++)
+        var layout = new TableLayoutPanel
         {
-            panel.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        }
+            Dock = DockStyle.Fill,
+            ColumnCount = 6,
+            RowCount = 1,
+            Padding = new Padding(14, 12, 14, 12),
+            AutoSize = true
+        };
 
-        // Columns: portLabel (0) | portCombo (1) | baudLabel (2) | baudInput (3) | 
-        //         intervalLabel (4) | intervalInput (5) | refreshBtn (6) | connectBtn (7) | toggleLogBtn (8)
-        _portLabel.Width = 90;
-        _baudLabel.Width = 90;
-        _intervalLabel.Width = 90;
+        // Nastav šířky sloupců
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)); // Label
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)); // Combo
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)); // Spacer
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)); // Tlačítka
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f)); // Expander
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)); // Log tlačítko
 
-        panel.Controls.Add(_portLabel, 0, 0);
-        panel.Controls.Add(_portCombo, 1, 0);
-        panel.Controls.Add(_baudLabel, 2, 0);
-        panel.Controls.Add(_baudInput, 3, 0);
-        panel.Controls.Add(_intervalLabel, 4, 0);
-        panel.Controls.Add(_intervalInput, 5, 0);
-        panel.Controls.Add(_refreshPortsButton, 6, 0);
-        panel.Controls.Add(_connectButton, 7, 0);
-        panel.Controls.Add(_toggleLogButton, 8, 0);
+        _portLabel.Font = new Font(DefaultFont.FontFamily, 9.5f, FontStyle.Regular);
+        _portLabel.Text = "COM Port:";
+        _portLabel.ForeColor = ForeText;
+        
+        _portCombo.Font = new Font(DefaultFont.FontFamily, 9.5f);
+        _portCombo.BackColor = InputBack;
+        _portCombo.ForeColor = ForeText;
+        _portCombo.Width = 140;
+        _portCombo.Height = 28;
 
+        _refreshPortsButton.Font = new Font(DefaultFont.FontFamily, 9f, FontStyle.Regular);
+        _refreshPortsButton.Size = new Size(110, 28);
+        _refreshPortsButton.FlatStyle = FlatStyle.Flat;
+        _refreshPortsButton.BackColor = InputBack;
+        _refreshPortsButton.ForeColor = ForeText;
+        _refreshPortsButton.FlatAppearance.BorderColor = InputBorder;
+        _refreshPortsButton.FlatAppearance.BorderSize = 1;
+
+        _connectButton.Font = new Font(DefaultFont.FontFamily, 9f, FontStyle.Regular);
+        _connectButton.Size = new Size(110, 28);
+        _connectButton.FlatStyle = FlatStyle.Flat;
+        _connectButton.BackColor = AccentColor;
+        _connectButton.ForeColor = Color.Black;
+        _connectButton.FlatAppearance.BorderColor = AccentColor;
+        _connectButton.FlatAppearance.BorderSize = 0;
+
+        _toggleLogButton.Font = new Font(DefaultFont.FontFamily, 10f, FontStyle.Bold);
+        _toggleLogButton.Text = "📋";
+        _toggleLogButton.Size = new Size(40, 28);
+        _toggleLogButton.FlatStyle = FlatStyle.Flat;
+        _toggleLogButton.BackColor = InputBack;
+        _toggleLogButton.ForeColor = ForeText;
+        _toggleLogButton.FlatAppearance.BorderColor = InputBorder;
+        _toggleLogButton.FlatAppearance.BorderSize = 1;
+
+        layout.Controls.Add(_portLabel, 0, 0);
+        layout.Controls.Add(_portCombo, 1, 0);
+        layout.Controls.Add(_refreshPortsButton, 3, 0);
+        layout.Controls.Add(_connectButton, 3, 0);
+        layout.Controls.Add(new Control() { Size = new Size(0, 0), Dock = DockStyle.Fill }, 4, 0);
+        layout.Controls.Add(_toggleLogButton, 5, 0);
+
+        panel.Controls.Add(layout);
         return panel;
     }
 
-    private Control BuildSettingsControls()
+    private Control BuildSettingsSection()
     {
-        var panel = new FlowLayoutPanel
+        // Vizuální sekce pro nastavení
+        var panel = new Panel
+        {
+            Dock = DockStyle.Fill,
+            AutoSize = true,
+            BackColor = SectionBack,
+            Margin = new Padding(0, 0, 0, 8)
+        };
+
+        var layout = new FlowLayoutPanel
         {
             Dock = DockStyle.Fill,
             AutoSize = true,
             WrapContents = true,
             FlowDirection = FlowDirection.LeftToRight,
-            Margin = new Padding(0, 6, 0, 6)
+            Padding = new Padding(14, 10, 14, 10),
+            Margin = new Padding(0)
         };
 
-        panel.Controls.Add(_settingsLanguageLabel);
-        panel.Controls.Add(_languageCombo);
+        // Jazyk
+        _settingsLanguageLabel.Font = new Font(DefaultFont.FontFamily, 9f);
+        _settingsLanguageLabel.Text = "Jazyk:";
+        _settingsLanguageLabel.ForeColor = SecondaryText;
+        _settingsLanguageLabel.AutoSize = true;
+        _settingsLanguageLabel.Margin = new Padding(0, 3, 6, 0);
 
-        panel.Controls.Add(_settingsDefaultComLabel);
-        panel.Controls.Add(_defaultPortCombo);
+        _languageCombo.Font = new Font(DefaultFont.FontFamily, 9f);
+        _languageCombo.BackColor = InputBack;
+        _languageCombo.ForeColor = ForeText;
+        _languageCombo.Width = 130;
+        _languageCombo.Margin = new Padding(0, 0, 20, 0);
 
-        panel.Controls.Add(_startupCheck);
-        panel.Controls.Add(_monitorSleepCheck);
-        panel.Controls.Add(_autoReconnectCheck);
-        panel.Controls.Add(_lowPowerCheck);
-        panel.Controls.Add(_idleSecondsLabel);
-        panel.Controls.Add(_idleSecondsInput);
-        panel.Controls.Add(_lowPowerIntervalLabel);
-        panel.Controls.Add(_lowPowerIntervalInput);
+        // Nastavení
+        _startupCheck.Font = new Font(DefaultFont.FontFamily, 9f);
+        _startupCheck.ForeColor = ForeText;
+        _startupCheck.Margin = new Padding(0, 0, 20, 0);
 
-        panel.Controls.Add(_cpuTempPrefLabel);
-        panel.Controls.Add(_cpuTempPrefCombo);
-        panel.Controls.Add(_gpuTempPrefLabel);
-        panel.Controls.Add(_gpuTempPrefCombo);
-        panel.Controls.Add(_saveSettingsButton);
+        _monitorSleepCheck.Font = new Font(DefaultFont.FontFamily, 9f);
+        _monitorSleepCheck.ForeColor = ForeText;
+        _monitorSleepCheck.Margin = new Padding(0, 0, 20, 0);
 
+        _autoReconnectCheck.Font = new Font(DefaultFont.FontFamily, 9f);
+        _autoReconnectCheck.ForeColor = ForeText;
+        _autoReconnectCheck.Margin = new Padding(0, 0, 20, 0);
+
+        _lowPowerCheck.Font = new Font(DefaultFont.FontFamily, 9f);
+        _lowPowerCheck.ForeColor = ForeText;
+        _lowPowerCheck.Margin = new Padding(0, 0, 8, 0);
+
+        layout.Controls.Add(_settingsLanguageLabel);
+        layout.Controls.Add(_languageCombo);
+        layout.Controls.Add(_startupCheck);
+        layout.Controls.Add(_monitorSleepCheck);
+        layout.Controls.Add(_autoReconnectCheck);
+        layout.Controls.Add(_lowPowerCheck);
+
+        panel.Controls.Add(layout);
         return panel;
     }
 
     private Control BuildContentArea()
     {
+        _previewGroup.Font = new Font(DefaultFont.FontFamily, 9f, FontStyle.Bold);
+        _previewGroup.ForeColor = ForeText;
+        _previewGroup.BackColor = SectionBack;
         _previewGroup.Controls.Add(_previewBox);
+
+        _logGroup.Font = new Font(DefaultFont.FontFamily, 9f, FontStyle.Bold);
+        _logGroup.ForeColor = ForeText;
+        _logGroup.BackColor = SectionBack;
         _logGroup.Controls.Add(_logBox);
         _logGroup.Visible = _logPanelVisible;
+
+        _previewBox.BackColor = InputBack;
+        _previewBox.ForeColor = ForeText;
+        _previewBox.Font = new Font("Consolas", 8.5f);
+
+        _logBox.BackColor = InputBack;
+        _logBox.ForeColor = ForeText;
+        _logBox.Font = new Font("Consolas", 8.5f);
 
         var split = new SplitContainer
         {
             Dock = DockStyle.Fill,
             Orientation = Orientation.Horizontal,
             SplitterDistance = 230,
-            Panel2Collapsed = !_logPanelVisible
+            Panel2Collapsed = !_logPanelVisible,
+            SplitterWidth = 4,
+            BackColor = WindowBack
         };
 
         split.Panel1.Controls.Add(_previewGroup);
@@ -458,21 +545,55 @@ internal sealed class MainForm : Form
 
     private Control BuildStatusBar()
     {
+        var panel = new Panel
+        {
+            Dock = DockStyle.Fill,
+            AutoSize = true,
+            BackColor = SectionBack,
+            Margin = new Padding(0, 8, 0, 0)
+        };
+
         var table = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
             AutoSize = true,
-            ColumnCount = 8
+            ColumnCount = 8,
+            Padding = new Padding(12, 8, 12, 8)
         };
 
+        // Nastavit styly sloupců
         table.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 40f));
+        table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25f));
         table.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 20f));
+        table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25f));
         table.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 20f));
+        table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25f));
         table.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 20f));
+        table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25f));
+
+        // Formátuj labely
+        var titleFont = new Font(DefaultFont.FontFamily, 8.5f, FontStyle.Bold);
+        var valueFont = new Font(DefaultFont.FontFamily, 8.5f);
+
+        _statusTitleLabel.Font = titleFont;
+        _statusTitleLabel.ForeColor = SecondaryText;
+        _connectionLabel.Font = valueFont;
+        _connectionLabel.ForeColor = AccentGreen;
+
+        _lastSendTitleLabel.Font = titleFont;
+        _lastSendTitleLabel.ForeColor = SecondaryText;
+        _lastSendLabel.Font = valueFont;
+        _lastSendLabel.ForeColor = ForeText;
+
+        _lastAckTitleLabel.Font = titleFont;
+        _lastAckTitleLabel.ForeColor = SecondaryText;
+        _lastAckLabel.Font = valueFont;
+        _lastAckLabel.ForeColor = ForeText;
+
+        _sampleMsTitleLabel.Font = titleFont;
+        _sampleMsTitleLabel.ForeColor = SecondaryText;
+        _sampleMsLabel.Font = valueFont;
+        _sampleMsLabel.ForeColor = ForeText;
 
         table.Controls.Add(_statusTitleLabel, 0, 0);
         table.Controls.Add(_connectionLabel, 1, 0);
@@ -483,7 +604,8 @@ internal sealed class MainForm : Form
         table.Controls.Add(_sampleMsTitleLabel, 6, 0);
         table.Controls.Add(_sampleMsLabel, 7, 0);
 
-        return table;
+        panel.Controls.Add(table);
+        return panel;
     }
 
     private void RefreshPorts()
@@ -1056,7 +1178,7 @@ internal sealed class MainForm : Form
     {
         _connectButton.Text = T("button.disconnect");
         _connectionLabel.Text = F("status.connected", port, baud);
-        _connectionLabel.ForeColor = AccentText;
+        _connectionLabel.ForeColor = AccentGreen;
         _sampleMsLabel.Text = T("status.na");
         _lastAckLabel.Text = T("status.never");
     }
