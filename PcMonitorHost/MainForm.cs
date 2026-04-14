@@ -108,20 +108,27 @@ internal sealed class MainForm : Form
 
     private readonly Label _connectionLabel = new() { AutoSize = true };
     private readonly Label _lastSendLabel = new() { AutoSize = true };
-    private readonly Label _statusTitleLabel = new() { AutoSize = true, Padding = new Padding(0, 3, 0, 0) };
+    private readonly StatusIndicator _statusIndicator = new() { Width = 140, Height = 20 };
+
     private readonly Label _lastSendTitleLabel = new() { AutoSize = true, Padding = new Padding(12, 3, 0, 0) };
     private readonly Label _lastAckTitleLabel = new() { AutoSize = true, Padding = new Padding(12, 3, 0, 0) };
     private readonly Label _lastAckLabel = new() { AutoSize = true };
     private readonly Label _sampleMsTitleLabel = new() { AutoSize = true, Padding = new Padding(12, 3, 0, 0) };
     private readonly Label _sampleMsLabel = new() { AutoSize = true };
 
-    private readonly TextBox _previewBox = new()
-    {
-        Multiline = true,
-        ReadOnly = true,
-        ScrollBars = ScrollBars.Vertical,
-        Dock = DockStyle.Fill
-    };
+    // Dashboard cards
+    private readonly TelemetryCard _cpuCard = new() { Title = "CPU", Unit = "%", AccentColor = AccentGreen, Maximum = 100f };
+    private readonly TelemetryCard _gpuCard = new() { Title = "GPU", Unit = "%", AccentColor = Color.FromArgb(80, 160, 255), Maximum = 100f };
+    private readonly TelemetryCard _cpuTempCard = new() { Title = "CPU Teplota", Unit = "°C", AccentColor = Color.FromArgb(255, 180, 0), Maximum = 110f };
+    private readonly TelemetryCard _gpuTempCard = new() { Title = "GPU Teplota", Unit = "°C", AccentColor = Color.FromArgb(255, 120, 60), Maximum = 110f };
+    private readonly TelemetryCard _ramCard = new() { Title = "RAM", Unit = "%", AccentColor = Color.FromArgb(180, 120, 255), Maximum = 100f };
+    private readonly TelemetryCard _powerCard = new() { Title = "Spotřeba", Unit = "W", AccentColor = Color.FromArgb(255, 200, 0), Maximum = 600f };
+    private readonly SparklineGraph _netSparkline = new() { LineColor = AccentGreen, FillColor = Color.FromArgb(30, 0, 200, 140), Height = 50, Maximum = 100f };
+    private readonly SparklineGraph _diskSparkline = new() { LineColor = Color.FromArgb(200, 140, 255), FillColor = Color.FromArgb(30, 200, 140, 255), Height = 50, Maximum = 100f };
+    private readonly Label _netLabel = new() { Text = "🌐 SÍŤ", Font = new Font("Segoe UI", 8.5F, FontStyle.Bold), ForeColor = Color.FromArgb(180, 180, 190), AutoSize = false, Height = 20 };
+    private readonly Label _diskLabel = new() { Text = "💾 DISKY", Font = new Font("Segoe UI", 8.5F, FontStyle.Bold), ForeColor = Color.FromArgb(180, 180, 190), AutoSize = false, Height = 20 };
+    private readonly Label _netValueLabel = new() { Text = "↓ 0  ↑ 0 MB/s", Font = new Font("Segoe UI", 8F), ForeColor = Color.FromArgb(160, 160, 170), AutoSize = true };
+    private readonly Label _diskValueLabel = new() { Text = "0%", Font = new Font("Segoe UI", 8F), ForeColor = Color.FromArgb(160, 160, 170), AutoSize = true };
 
     private readonly TextBox _logBox = new()
     {
@@ -131,9 +138,7 @@ internal sealed class MainForm : Form
         Dock = DockStyle.Fill
     };
 
-    private readonly GroupBox _previewGroup = new() { Dock = DockStyle.Fill };
-    private readonly GroupBox _logGroup = new() { Dock = DockStyle.Fill };
-    private bool _logPanelVisible = true;
+    private bool _logPanelVisible = false;
 
     private readonly Timer _sendTimer = new();
     private readonly Timer _reconnectTimer = new();
@@ -155,7 +160,6 @@ internal sealed class MainForm : Form
     private bool _isExiting;
     private bool _trayHintShown;
     private bool _sendInProgress;
-    private DateTime _lastPreviewRefreshUtc = DateTime.MinValue;
     private DisplayState _displayState = DisplayState.Unknown;
     private nint _powerSettingNotificationHandle = nint.Zero;
     private DateTime _lastAckUtc = DateTime.MinValue;
@@ -166,7 +170,6 @@ internal sealed class MainForm : Form
     private const int WM_POWERBROADCAST = 0x0218;
     private const int PBT_POWERSETTINGCHANGE = 0x8013;
     private const int DEVICE_NOTIFY_WINDOW_HANDLE = 0x00000000;
-    private static readonly TimeSpan PreviewRefreshInterval = TimeSpan.FromMilliseconds(220);
     private static readonly Guid GuidSessionDisplayStatus = new("2B84C20E-AD23-4DDF-93DB-05FFBD7EFCA5");
     private static readonly TimeSpan AckTimeout = TimeSpan.FromSeconds(4);
     private static readonly TimeSpan AutoReconnectLogInterval = TimeSpan.FromSeconds(6);
@@ -351,13 +354,14 @@ internal sealed class MainForm : Form
             Dock = DockStyle.Fill,
             ColumnCount = 1,
             RowCount = 4,
-            Padding = new Padding(12, 12, 12, 12)
+            Padding = new Padding(10, 10, 10, 10),
+            BackColor = WindowBack
         };
 
-        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
-        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 50));  // Connection bar
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 90));  // Settings
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100f)); // Dashboard + Log
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));  // Status bar
 
         root.Controls.Add(BuildConnectionSection(), 0, 0);
         root.Controls.Add(BuildSettingsSection(), 0, 1);
@@ -369,73 +373,118 @@ internal sealed class MainForm : Form
 
     private Control BuildConnectionSection()
     {
-        // Vizuální sekce pro připojení
         var panel = new Panel
         {
             Dock = DockStyle.Fill,
-            AutoSize = true,
             BackColor = SectionBack,
-            Margin = new Padding(0, 0, 0, 8)
+            Padding = new Padding(12, 8, 12, 8)
         };
 
         var layout = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
-            ColumnCount = 6,
+            ColumnCount = 9,
             RowCount = 1,
-            Padding = new Padding(14, 12, 14, 12),
-            AutoSize = true
+            Padding = new Padding(0)
         };
 
-        // Nastav šířky sloupců
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)); // Label
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)); // Combo
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)); // Spacer
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)); // Tlačítka
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f)); // Expander
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)); // Log tlačítko
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));     // 0: COM label
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 130)); // 1: COM combo
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));     // 2: Baud label
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 95));  // 3: Baud input
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));     // 4: Interval label
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 80));  // 5: Interval input
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 8));   // 6: spacer
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));     // 7: buttons
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f)); // 8: filler
 
-        _portLabel.Font = new Font(DefaultFont.FontFamily, 9.5f, FontStyle.Regular);
-        _portLabel.Text = "COM Port:";
-        _portLabel.ForeColor = ForeText;
-        
-        _portCombo.Font = new Font(DefaultFont.FontFamily, 9.5f);
+        _portLabel.Text = "COM port:";
+        _portLabel.Font = new Font(new FontFamily("Segoe UI"), 9f, FontStyle.Regular);
+        _portLabel.ForeColor = SecondaryText;
+        _portLabel.Dock = DockStyle.Fill;
+        _portLabel.TextAlign = ContentAlignment.MiddleLeft;
+
+        _portCombo.Font = new Font(new FontFamily("Segoe UI"), 9f);
         _portCombo.BackColor = InputBack;
         _portCombo.ForeColor = ForeText;
-        _portCombo.Width = 140;
-        _portCombo.Height = 28;
+        _portCombo.Dock = DockStyle.Fill;
 
-        _refreshPortsButton.Font = new Font(DefaultFont.FontFamily, 9f, FontStyle.Regular);
-        _refreshPortsButton.Size = new Size(110, 28);
+        _baudLabel.Text = "Rychlost:";
+        _baudLabel.Font = new Font(new FontFamily("Segoe UI"), 9f, FontStyle.Regular);
+        _baudLabel.ForeColor = SecondaryText;
+        _baudLabel.Dock = DockStyle.Fill;
+        _baudLabel.TextAlign = ContentAlignment.MiddleLeft;
+
+        _baudInput.Font = new Font(new FontFamily("Segoe UI"), 9f);
+        _baudInput.BackColor = InputBack;
+        _baudInput.ForeColor = ForeText;
+        _baudInput.Dock = DockStyle.Fill;
+
+        _intervalLabel.Text = "Interval (ms):";
+        _intervalLabel.Font = new Font(new FontFamily("Segoe UI"), 9f, FontStyle.Regular);
+        _intervalLabel.ForeColor = SecondaryText;
+        _intervalLabel.Dock = DockStyle.Fill;
+        _intervalLabel.TextAlign = ContentAlignment.MiddleLeft;
+
+        _intervalInput.Font = new Font(new FontFamily("Segoe UI"), 9f);
+        _intervalInput.BackColor = InputBack;
+        _intervalInput.ForeColor = ForeText;
+        _intervalInput.Dock = DockStyle.Fill;
+
+        // Buttons panel
+        var btnPanel = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.LeftToRight,
+            BackColor = Color.Transparent,
+            Padding = new Padding(0),
+            Margin = new Padding(0)
+        };
+
+        _refreshPortsButton.Text = "Obnovit porty";
+        _refreshPortsButton.Font = new Font(new FontFamily("Segoe UI"), 8.5f, FontStyle.Regular);
+        _refreshPortsButton.MinimumSize = new Size(90, 28);
+        _refreshPortsButton.Height = 28;
         _refreshPortsButton.FlatStyle = FlatStyle.Flat;
         _refreshPortsButton.BackColor = InputBack;
         _refreshPortsButton.ForeColor = ForeText;
         _refreshPortsButton.FlatAppearance.BorderColor = InputBorder;
         _refreshPortsButton.FlatAppearance.BorderSize = 1;
+        _refreshPortsButton.Margin = new Padding(0, 0, 6, 0);
 
-        _connectButton.Font = new Font(DefaultFont.FontFamily, 9f, FontStyle.Regular);
-        _connectButton.Size = new Size(110, 28);
+        _connectButton.Text = "Připojit";
+        _connectButton.Font = new Font(new FontFamily("Segoe UI"), 8.5f, FontStyle.Bold);
+        _connectButton.MinimumSize = new Size(80, 28);
+        _connectButton.Height = 28;
         _connectButton.FlatStyle = FlatStyle.Flat;
-        _connectButton.BackColor = AccentColor;
-        _connectButton.ForeColor = Color.Black;
-        _connectButton.FlatAppearance.BorderColor = AccentColor;
+        _connectButton.BackColor = AccentGreen;
+        _connectButton.ForeColor = Color.FromArgb(20, 20, 22);
+        _connectButton.FlatAppearance.BorderColor = AccentGreen;
         _connectButton.FlatAppearance.BorderSize = 0;
+        _connectButton.Margin = new Padding(0, 0, 6, 0);
 
-        _toggleLogButton.Font = new Font(DefaultFont.FontFamily, 10f, FontStyle.Bold);
-        _toggleLogButton.Text = "📋";
-        _toggleLogButton.Size = new Size(40, 28);
+        _toggleLogButton.Text = "📋 Log";
+        _toggleLogButton.Font = new Font(new FontFamily("Segoe UI"), 8.5f, FontStyle.Regular);
+        _toggleLogButton.MinimumSize = new Size(70, 28);
+        _toggleLogButton.Height = 28;
         _toggleLogButton.FlatStyle = FlatStyle.Flat;
         _toggleLogButton.BackColor = InputBack;
         _toggleLogButton.ForeColor = ForeText;
         _toggleLogButton.FlatAppearance.BorderColor = InputBorder;
         _toggleLogButton.FlatAppearance.BorderSize = 1;
+        _toggleLogButton.Margin = new Padding(0, 0, 0, 0);
+
+        btnPanel.Controls.Add(_refreshPortsButton);
+        btnPanel.Controls.Add(_connectButton);
+        btnPanel.Controls.Add(_toggleLogButton);
 
         layout.Controls.Add(_portLabel, 0, 0);
         layout.Controls.Add(_portCombo, 1, 0);
-        layout.Controls.Add(_refreshPortsButton, 3, 0);
-        layout.Controls.Add(_connectButton, 3, 0);
-        layout.Controls.Add(new Control() { Size = new Size(0, 0), Dock = DockStyle.Fill }, 4, 0);
-        layout.Controls.Add(_toggleLogButton, 5, 0);
+        layout.Controls.Add(_baudLabel, 2, 0);
+        layout.Controls.Add(_baudInput, 3, 0);
+        layout.Controls.Add(_intervalLabel, 4, 0);
+        layout.Controls.Add(_intervalInput, 5, 0);
+        layout.Controls.Add(btnPanel, 7, 0);
 
         panel.Controls.Add(layout);
         return panel;
@@ -443,104 +492,283 @@ internal sealed class MainForm : Form
 
     private Control BuildSettingsSection()
     {
-        // Vizuální sekce pro nastavení
         var panel = new Panel
         {
             Dock = DockStyle.Fill,
-            AutoSize = true,
             BackColor = SectionBack,
-            Margin = new Padding(0, 0, 0, 8)
+            Padding = new Padding(12, 6, 12, 6)
         };
 
-        var layout = new FlowLayoutPanel
+        var layout = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
-            AutoSize = true,
-            WrapContents = true,
-            FlowDirection = FlowDirection.LeftToRight,
-            Padding = new Padding(14, 10, 14, 10),
-            Margin = new Padding(0)
+            ColumnCount = 4,
+            RowCount = 2,
+            Padding = new Padding(0)
         };
 
-        // Jazyk
-        _settingsLanguageLabel.Font = new Font(DefaultFont.FontFamily, 9f);
-        _settingsLanguageLabel.Text = "Jazyk:";
-        _settingsLanguageLabel.ForeColor = SecondaryText;
-        _settingsLanguageLabel.AutoSize = true;
-        _settingsLanguageLabel.Margin = new Padding(0, 3, 6, 0);
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25f));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25f));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25f));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25f));
 
-        _languageCombo.Font = new Font(DefaultFont.FontFamily, 9f);
-        _languageCombo.BackColor = InputBack;
-        _languageCombo.ForeColor = ForeText;
-        _languageCombo.Width = 130;
-        _languageCombo.Margin = new Padding(0, 0, 20, 0);
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 50f));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 50f));
 
-        // Nastavení
-        _startupCheck.Font = new Font(DefaultFont.FontFamily, 9f);
+        // === Row 0: Combos ===
+        layout.Controls.Add(MakeSettingRow(_settingsLanguageLabel, "Jazyk:", _languageCombo), 0, 0);
+        layout.Controls.Add(MakeSettingRow(_settingsDefaultComLabel, "Výchozí COM:", _defaultPortCombo), 1, 0);
+        layout.Controls.Add(MakeSettingRow(_cpuTempPrefLabel, "CPU teplota:", _cpuTempPrefCombo), 2, 0);
+        layout.Controls.Add(MakeSettingRow(_gpuTempPrefLabel, "GPU teplota:", _gpuTempPrefCombo), 3, 0);
+
+        // === Row 1: Checkboxes + intervals + save ===
+        var checksPanel = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = true,
+            BackColor = Color.Transparent,
+            Padding = new Padding(0, 2, 0, 0)
+        };
+        _startupCheck.Text = "Spouštět s Windows";
+        _startupCheck.Font = new Font(new FontFamily("Segoe UI"), 8.5f);
         _startupCheck.ForeColor = ForeText;
-        _startupCheck.Margin = new Padding(0, 0, 20, 0);
+        _startupCheck.AutoSize = true;
 
-        _monitorSleepCheck.Font = new Font(DefaultFont.FontFamily, 9f);
+        _monitorSleepCheck.Text = "Uspat ESP displej při vypnutém monitoru";
+        _monitorSleepCheck.Font = new Font(new FontFamily("Segoe UI"), 8.5f);
         _monitorSleepCheck.ForeColor = ForeText;
-        _monitorSleepCheck.Margin = new Padding(0, 0, 20, 0);
+        _monitorSleepCheck.AutoSize = true;
 
-        _autoReconnectCheck.Font = new Font(DefaultFont.FontFamily, 9f);
+        _autoReconnectCheck.Text = "Automaticky připojit";
+        _autoReconnectCheck.Font = new Font(new FontFamily("Segoe UI"), 8.5f);
         _autoReconnectCheck.ForeColor = ForeText;
-        _autoReconnectCheck.Margin = new Padding(0, 0, 20, 0);
+        _autoReconnectCheck.AutoSize = true;
 
-        _lowPowerCheck.Font = new Font(DefaultFont.FontFamily, 9f);
+        _lowPowerCheck.Text = "Úsporný režim při neaktivitě";
+        _lowPowerCheck.Font = new Font(new FontFamily("Segoe UI"), 8.5f);
         _lowPowerCheck.ForeColor = ForeText;
-        _lowPowerCheck.Margin = new Padding(0, 0, 8, 0);
+        _lowPowerCheck.AutoSize = true;
 
-        layout.Controls.Add(_settingsLanguageLabel);
-        layout.Controls.Add(_languageCombo);
-        layout.Controls.Add(_startupCheck);
-        layout.Controls.Add(_monitorSleepCheck);
-        layout.Controls.Add(_autoReconnectCheck);
-        layout.Controls.Add(_lowPowerCheck);
+        checksPanel.Controls.Add(_startupCheck);
+        checksPanel.Controls.Add(_monitorSleepCheck);
+        checksPanel.Controls.Add(_autoReconnectCheck);
+        checksPanel.Controls.Add(_lowPowerCheck);
+        layout.Controls.Add(checksPanel, 0, 1);
+
+        layout.Controls.Add(MakeSettingRow(_idleSecondsLabel, "Neaktivita (s):", _idleSecondsInput), 1, 1);
+        layout.Controls.Add(MakeSettingRow(_lowPowerIntervalLabel, "Interval úspory (ms):", _lowPowerIntervalInput), 2, 1);
+
+        var savePanel = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.RightToLeft,
+            BackColor = Color.Transparent,
+            Padding = new Padding(0, 2, 0, 0)
+        };
+        _saveSettingsButton.Text = "Uložit nastavení";
+        _saveSettingsButton.Font = new Font(new FontFamily("Segoe UI"), 8.5f, FontStyle.Bold);
+        _saveSettingsButton.MinimumSize = new Size(120, 26);
+        _saveSettingsButton.Height = 26;
+        _saveSettingsButton.FlatStyle = FlatStyle.Flat;
+        _saveSettingsButton.BackColor = AccentColor;
+        _saveSettingsButton.ForeColor = Color.FromArgb(20, 20, 22);
+        _saveSettingsButton.FlatAppearance.BorderColor = AccentColor;
+        _saveSettingsButton.FlatAppearance.BorderSize = 0;
+        savePanel.Controls.Add(_saveSettingsButton);
+        layout.Controls.Add(savePanel, 3, 1);
 
         panel.Controls.Add(layout);
         return panel;
     }
 
+    private static Panel MakeSettingRow(Label label, string labelText, Control input)
+    {
+        var panel = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.LeftToRight,
+            BackColor = Color.Transparent,
+            Padding = new Padding(0, 2, 0, 0),
+            WrapContents = false
+        };
+
+        label.Text = labelText;
+        label.Font = new Font(new FontFamily("Segoe UI"), 8.5f, FontStyle.Regular);
+        label.ForeColor = SecondaryText;
+        label.AutoSize = true;
+        label.TextAlign = ContentAlignment.MiddleLeft;
+        label.Margin = new Padding(0, 3, 6, 0);
+
+        input.Font = new Font(new FontFamily("Segoe UI"), 8.5f);
+        input.BackColor = InputBack;
+        input.ForeColor = ForeText;
+        input.Width = 110;
+        input.Height = 26;
+
+        panel.Controls.Add(label);
+        panel.Controls.Add(input);
+        return panel;
+    }
+
     private Control BuildContentArea()
     {
-        _previewGroup.Font = new Font(DefaultFont.FontFamily, 9f, FontStyle.Bold);
-        _previewGroup.ForeColor = ForeText;
-        _previewGroup.BackColor = SectionBack;
-        _previewGroup.Controls.Add(_previewBox);
-
-        _logGroup.Font = new Font(DefaultFont.FontFamily, 9f, FontStyle.Bold);
-        _logGroup.ForeColor = ForeText;
-        _logGroup.BackColor = SectionBack;
-        _logGroup.Controls.Add(_logBox);
-        _logGroup.Visible = _logPanelVisible;
-
-        _previewBox.BackColor = InputBack;
-        _previewBox.ForeColor = ForeText;
-        _previewBox.Font = new Font("Consolas", 8.5f);
-
-        _logBox.BackColor = InputBack;
-        _logBox.ForeColor = ForeText;
-        _logBox.Font = new Font("Consolas", 8.5f);
-
-        var split = new SplitContainer
+        var mainSplit = new SplitContainer
         {
             Dock = DockStyle.Fill,
             Orientation = Orientation.Horizontal,
-            SplitterDistance = 230,
-            Panel2Collapsed = !_logPanelVisible,
-            SplitterWidth = 4,
+            SplitterDistance = 320,
+            Panel2Collapsed = true,
+            SplitterWidth = 3,
+            BackColor = WindowBack,
+            FixedPanel = FixedPanel.Panel1
+        };
+
+        // === Dashboard panel ===
+        var dashboardPanel = new Panel
+        {
+            Dock = DockStyle.Fill,
             BackColor = WindowBack
         };
 
-        split.Panel1.Controls.Add(_previewGroup);
-        split.Panel2.Controls.Add(_logGroup);
+        // Row 1: CPU + GPU (large cards) - 110px height
+        var row1 = new Panel
+        {
+            Dock = DockStyle.Top,
+            Height = 110,
+            BackColor = Color.Transparent
+        };
+        _cpuCard.Size = new Size(200, 106);
+        _cpuCard.Dock = DockStyle.Left;
+        _gpuCard.Size = new Size(200, 106);
+        _gpuCard.Dock = DockStyle.Left;
+        row1.Controls.Add(_cpuCard);
+        row1.Controls.Add(_gpuCard);
 
-        // Store reference for toggling later
-        Tag = split;
+        // Row 2: Temps + RAM + Power - 110px height
+        var row2 = new Panel
+        {
+            Dock = DockStyle.Top,
+            Height = 110,
+            BackColor = Color.Transparent
+        };
+        _cpuTempCard.Size = new Size(150, 106);
+        _cpuTempCard.Dock = DockStyle.Left;
+        _gpuTempCard.Size = new Size(150, 106);
+        _gpuTempCard.Dock = DockStyle.Left;
+        _ramCard.Size = new Size(150, 106);
+        _ramCard.Dock = DockStyle.Left;
+        _powerCard.Size = new Size(150, 106);
+        _powerCard.Dock = DockStyle.Left;
+        row2.Controls.Add(_cpuTempCard);
+        row2.Controls.Add(_gpuTempCard);
+        row2.Controls.Add(_ramCard);
+        row2.Controls.Add(_powerCard);
 
-        return split;
+        // Row 3: Network + Disk sparklines - 90px height
+        var row3 = new Panel
+        {
+            Dock = DockStyle.Top,
+            Height = 90,
+            BackColor = Color.Transparent
+        };
+
+        var netPanel = new RoundedPanel
+        {
+            Dock = DockStyle.Left,
+            Width = 160,
+            CornerRadius = 8,
+            Padding = new Padding(8, 4, 8, 4)
+        };
+        _netLabel.Dock = DockStyle.Top;
+        _netValueLabel.Dock = DockStyle.Top;
+        _netValueLabel.Padding = new Padding(0, 2, 0, 0);
+        _netSparkline.Dock = DockStyle.Fill;
+        netPanel.Controls.Add(_netSparkline);
+        netPanel.Controls.Add(_netValueLabel);
+        netPanel.Controls.Add(_netLabel);
+
+        var diskPanel = new RoundedPanel
+        {
+            Dock = DockStyle.Left,
+            Width = 160,
+            CornerRadius = 8,
+            Padding = new Padding(8, 4, 8, 4)
+        };
+        _diskLabel.Dock = DockStyle.Top;
+        _diskValueLabel.Dock = DockStyle.Top;
+        _diskValueLabel.Padding = new Padding(0, 2, 0, 0);
+        _diskSparkline.Dock = DockStyle.Fill;
+        diskPanel.Controls.Add(_diskSparkline);
+        diskPanel.Controls.Add(_diskValueLabel);
+        diskPanel.Controls.Add(_diskLabel);
+
+        row3.Controls.Add(netPanel);
+        row3.Controls.Add(diskPanel);
+
+        dashboardPanel.Controls.Add(row3);
+        dashboardPanel.Controls.Add(row2);
+        dashboardPanel.Controls.Add(row1);
+
+        // === Log panel ===
+        var logPanel = new Panel
+        {
+            Dock = DockStyle.Fill,
+            BackColor = WindowBack
+        };
+
+        var logHeader = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            Height = 30,
+            FlowDirection = FlowDirection.LeftToRight,
+            BackColor = Color.Transparent,
+            Padding = new Padding(8, 3, 8, 3)
+        };
+
+        var logTitle = new Label
+        {
+            Text = T("group.log"),
+            Font = new Font(new FontFamily("Segoe UI"), 9F, FontStyle.Bold),
+            ForeColor = SecondaryText,
+            AutoSize = true,
+            Padding = new Padding(4, 3, 0, 0)
+        };
+
+        var clearLogBtn = new Button
+        {
+            Text = "Vymazat",
+            AutoSize = true,
+            FlatStyle = FlatStyle.Flat,
+            BackColor = InputBack,
+            ForeColor = ForeText,
+            Font = new Font(new FontFamily("Segoe UI"), 8f),
+            Margin = new Padding(8, 0, 0, 0)
+        };
+        clearLogBtn.Click += (_, _) => _logBox.Clear();
+
+        logHeader.Controls.Add(logTitle);
+        logHeader.Controls.Add(clearLogBtn);
+
+        _logBox.Multiline = true;
+        _logBox.ReadOnly = true;
+        _logBox.ScrollBars = ScrollBars.Vertical;
+        _logBox.Dock = DockStyle.Fill;
+        _logBox.BackColor = Color.FromArgb(16, 16, 20);
+        _logBox.ForeColor = Color.FromArgb(200, 200, 210);
+        _logBox.Font = new Font("Consolas", 8.5F);
+        _logBox.BorderStyle = BorderStyle.None;
+
+        var logContainer = new Panel { Dock = DockStyle.Fill };
+        logContainer.Controls.Add(_logBox);
+        logContainer.Controls.Add(logHeader);
+
+        logPanel.Controls.Add(logContainer);
+
+        mainSplit.Panel1.Controls.Add(dashboardPanel);
+        mainSplit.Panel2.Controls.Add(logPanel);
+
+        return mainSplit;
     }
 
     private Control BuildStatusBar()
@@ -548,54 +776,73 @@ internal sealed class MainForm : Form
         var panel = new Panel
         {
             Dock = DockStyle.Fill,
-            AutoSize = true,
-            BackColor = SectionBack,
-            Margin = new Padding(0, 8, 0, 0)
+            BackColor = SectionBack
         };
 
         var table = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
-            AutoSize = true,
             ColumnCount = 8,
-            Padding = new Padding(12, 8, 12, 8)
+            RowCount = 1,
+            Padding = new Padding(12, 6, 12, 6)
         };
 
-        // Nastavit styly sloupců
         table.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25f));
+        table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 20f));
         table.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25f));
+        table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 20f));
         table.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25f));
+        table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 20f));
         table.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25f));
+        table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 20f));
 
-        // Formátuj labely
-        var titleFont = new Font(DefaultFont.FontFamily, 8.5f, FontStyle.Bold);
-        var valueFont = new Font(DefaultFont.FontFamily, 8.5f);
+        var labelFont = new Font(new FontFamily("Segoe UI"), 8f, FontStyle.Regular);
+        var valueFont = new Font(new FontFamily("Segoe UI"), 8.5f, FontStyle.Bold);
 
-        _statusTitleLabel.Font = titleFont;
-        _statusTitleLabel.ForeColor = SecondaryText;
+
+
         _connectionLabel.Font = valueFont;
-        _connectionLabel.ForeColor = AccentGreen;
+        _connectionLabel.ForeColor = ErrorText;
+        _connectionLabel.Text = "Odpojeno";
 
-        _lastSendTitleLabel.Font = titleFont;
+        _lastSendTitleLabel.Font = labelFont;
         _lastSendTitleLabel.ForeColor = SecondaryText;
+        _lastSendTitleLabel.Text = "Poslední odeslání:";
+
         _lastSendLabel.Font = valueFont;
         _lastSendLabel.ForeColor = ForeText;
+        _lastSendLabel.Text = "Nikdy";
 
-        _lastAckTitleLabel.Font = titleFont;
+        _lastAckTitleLabel.Font = labelFont;
         _lastAckTitleLabel.ForeColor = SecondaryText;
+        _lastAckTitleLabel.Text = "Poslední ACK:";
+
         _lastAckLabel.Font = valueFont;
         _lastAckLabel.ForeColor = ForeText;
+        _lastAckLabel.Text = "Nikdy";
 
-        _sampleMsTitleLabel.Font = titleFont;
+        _sampleMsTitleLabel.Font = labelFont;
         _sampleMsTitleLabel.ForeColor = SecondaryText;
+        _sampleMsTitleLabel.Text = "Vzorek (ms):";
+
         _sampleMsLabel.Font = valueFont;
         _sampleMsLabel.ForeColor = ForeText;
+        _sampleMsLabel.Text = "N/A";
 
-        table.Controls.Add(_statusTitleLabel, 0, 0);
+        var statusFlow = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.LeftToRight,
+            BackColor = Color.Transparent,
+            Padding = new Padding(0)
+        };
+        _statusIndicator.Width = 140;
+        _statusIndicator.Height = 20;
+        _statusIndicator.DotColor = ErrorText;
+        _statusIndicator.Text = "Odpojeno";
+        statusFlow.Controls.Add(_statusIndicator);
+
+        table.Controls.Add(statusFlow, 0, 0);
         table.Controls.Add(_connectionLabel, 1, 0);
         table.Controls.Add(_lastSendTitleLabel, 2, 0);
         table.Controls.Add(_lastSendLabel, 3, 0);
@@ -721,7 +968,7 @@ internal sealed class MainForm : Form
     private void ToggleLogPanel()
     {
         _logPanelVisible = !_logPanelVisible;
-        
+
         if (Controls[0] is not TableLayoutPanel root)
             return;
 
@@ -729,7 +976,8 @@ internal sealed class MainForm : Form
             return;
 
         split.Panel2Collapsed = !_logPanelVisible;
-        _logGroup.Visible = _logPanelVisible;
+        _toggleLogButton.BackColor = _logPanelVisible ? AccentColor : InputBack;
+        _toggleLogButton.ForeColor = _logPanelVisible ? Color.FromArgb(20, 20, 22) : ForeText;
     }
 
     private async void SendSample()
@@ -755,12 +1003,9 @@ internal sealed class MainForm : Form
             string packet = SerialPacketFormatter.BuildDataPacket(sample, displaySleepRequested, false);
 
             _serialService.SendLine(packet);
-            _lastSendLabel.Text = DateTime.Now.ToString("HH:mm:ss.fff", CultureInfo.InvariantCulture);
+            _lastSendLabel.Text = DateTime.Now.ToString("HH:mm:ss", CultureInfo.InvariantCulture);
             _sampleMsLabel.Text = $"{sw.ElapsedMilliseconds} ms";
-            if (ShouldRefreshPreview())
-            {
-                _previewBox.Text = BuildPreview(sample, packet, displaySleepRequested);
-            }
+            UpdateDashboard(sample);
         }
         catch (Exception ex)
         {
@@ -773,6 +1018,32 @@ internal sealed class MainForm : Form
         {
             _sendInProgress = false;
         }
+    }
+
+    private void UpdateDashboard(HardwareSample sample)
+    {
+        // Update card values
+        _cpuCard.Value = sample.CpuUsagePercent;
+        _cpuTempCard.Value = sample.CpuTempC;
+        _gpuCard.Value = sample.GpuUsagePercent;
+        _gpuTempCard.Value = sample.GpuTempC;
+        _ramCard.Value = sample.RamUsagePercent;
+        _powerCard.Value = sample.TotalPowerW;
+
+        // Sparklines for CPU, GPU, RAM, Power
+        _cpuCard.AddSparklineValue(sample.CpuUsagePercent);
+        _gpuCard.AddSparklineValue(sample.GpuUsagePercent);
+        _ramCard.AddSparklineValue(sample.RamUsagePercent);
+        _powerCard.AddSparklineValue(sample.TotalPowerW);
+
+        // Network sparkline
+        _netSparkline.AddValue(sample.NetDownloadMBps + sample.NetUploadMBps);
+        _netValueLabel.Text = $"↓ {sample.NetDownloadMBps:0.0}  ↑ {sample.NetUploadMBps:0.0} MB/s";
+
+        // Disk sparkline
+        float diskMax = sample.DiskUsages.Count > 0 ? sample.DiskUsages.Max(d => d.UsagePercent) : 0f;
+        _diskSparkline.AddValue(diskMax);
+        _diskValueLabel.Text = FormatDisks(sample.DiskUsages);
     }
 
     private void OnSendTimerTick()
@@ -883,40 +1154,6 @@ internal sealed class MainForm : Form
         }
     }
 
-    private bool ShouldRefreshPreview()
-    {
-        DateTime now = DateTime.UtcNow;
-        if (now - _lastPreviewRefreshUtc < PreviewRefreshInterval)
-        {
-            return false;
-        }
-
-        _lastPreviewRefreshUtc = now;
-        return true;
-    }
-
-    private string BuildPreview(HardwareSample sample, string packet, bool displaySleepRequested)
-    {
-        var builder = new StringBuilder(320);
-        builder.AppendLine($"{T("preview.cpuUsage")} {FormatPercent(sample.CpuUsagePercent)}");
-        builder.AppendLine($"{T("preview.cpuTemp")}  {FormatTemp(sample.CpuTempC)}");
-        builder.AppendLine($"{T("preview.cpuCt")}   {sample.CpuPhysicalCores}/{sample.CpuLogicalThreads}");
-        builder.AppendLine($"{T("preview.ramUsage")} {FormatPercent(sample.RamUsagePercent)}");
-        builder.AppendLine($"{T("preview.ramUsed")}  {FormatGb(sample.RamUsedGb)} / {FormatGb(sample.RamTotalGb)}");
-        builder.AppendLine($"{T("preview.gpuUsage")} {FormatPercent(sample.GpuUsagePercent)}");
-        builder.AppendLine($"{T("preview.gpuTemp")}  {FormatTemp(sample.GpuTempC)}");
-        builder.AppendLine($"{T("preview.netDown")}  {FormatMBps(sample.NetDownloadMBps)}");
-        builder.AppendLine($"{T("preview.netUp")}    {FormatMBps(sample.NetUploadMBps)}");
-        builder.AppendLine($"{T("preview.disks")}    {FormatDisks(sample.DiskUsages)}");
-        builder.AppendLine($"{T("preview.power")}     {FormatW(sample.TotalPowerW)}");
-        builder.AppendLine($"{T("preview.monitorState")} {DisplayStateLabel(_displayState)}");
-        builder.AppendLine($"{T("preview.displaySleep")} {(displaySleepRequested ? T("misc.yes") : T("misc.no"))}");
-        builder.AppendLine();
-        builder.AppendLine(T("preview.packet"));
-        builder.Append(packet);
-        return builder.ToString();
-    }
-
     private void SaveSettings()
     {
         _settings.Language = _language;
@@ -998,10 +1235,7 @@ internal sealed class MainForm : Form
         _gpuTempPrefLabel.Text = T("settings.gpuTempPref");
         _saveSettingsButton.Text = T("settings.save");
 
-        _previewGroup.Text = T("group.preview");
-        _logGroup.Text = T("group.log");
 
-        _statusTitleLabel.Text = T("status.title");
         _lastSendTitleLabel.Text = T("status.lastSend");
         _lastAckTitleLabel.Text = T("status.lastAck");
         _sampleMsTitleLabel.Text = T("status.sampleMs");
@@ -1250,7 +1484,6 @@ internal sealed class MainForm : Form
         BackColor = WindowBack;
         ForeColor = ForeText;
         Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point);
-        _previewBox.Font = new Font("Consolas", 9F, FontStyle.Regular, GraphicsUnit.Point);
         _logBox.Font = new Font("Consolas", 9F, FontStyle.Regular, GraphicsUnit.Point);
 
         ApplyThemeRecursive(this);
@@ -1416,19 +1649,19 @@ internal sealed class MainForm : Form
             {
                 "app.title" => "PC Monitor Host (ESP32)",
                 "label.com" => "COM Port:",
-                "label.baud" => "Baud:",
+                "label.baud" => "Baud Rate:",
                 "label.interval" => "Interval (ms):",
                 "button.refresh" => "Refresh Ports",
                 "button.connect" => "Connect",
                 "button.disconnect" => "Disconnect",
-                "button.toggleLog" => "📋",
+                "button.toggleLog" => "📋 Log",
                 "settings.language" => "Language:",
                 "settings.defaultCom" => "Default COM:",
                 "settings.startWithWindows" => "Start with Windows",
                 "settings.sleepWhenMonitorsOff" => "Sleep ESP display when monitor is OFF",
                 "settings.autoReconnect" => "Auto reconnect",
                 "settings.lowPowerWhenIdle" => "Low power when idle",
-                "settings.idleSeconds" => "Idle (s):",
+                "settings.idleSeconds" => "Idle timeout (s):",
                 "settings.lowPowerInterval" => "Low power interval (ms):",
                 "settings.cpuTempPref" => "CPU temp sensor:",
                 "settings.gpuTempPref" => "GPU temp sensor:",
@@ -1437,7 +1670,7 @@ internal sealed class MainForm : Form
                 "group.log" => "Log",
                 "status.title" => "Status:",
                 "status.lastSend" => "Last send:",
-                "status.lastAck" => "Last ack:",
+                "status.lastAck" => "Last ACK:",
                 "status.sampleMs" => "Sample (ms):",
                 "status.disconnected" => "Disconnected",
                 "status.connected" => "Connected to {0} @ {1}",
@@ -1455,7 +1688,7 @@ internal sealed class MainForm : Form
                 "log.tipAdmin" => "Tip: Run app as Administrator for better CPU temperature access in LibreHardwareMonitor.",
                 "log.portsRefreshed" => "Ports refreshed: {0}",
                 "log.connected" => "Connected: {0} @ {1}",
-                "log.connectError" => "Connect error: {0}",
+                "log.connectError" => "Connection error: {0}",
                 "log.manualDisconnect" => "Manual disconnect.",
                 "log.autoReconnect" => "Auto reconnect: {0} @ {1}",
                 "log.autoReconnectError" => "Auto reconnect error: {0}",
@@ -1465,17 +1698,17 @@ internal sealed class MainForm : Form
                 "log.startupSetError" => "Unable to set startup with Windows: {0}",
                 "preview.cpuUsage" => "CPU usage:",
                 "preview.cpuTemp" => "CPU temp:",
-                "preview.cpuCt" => "CPU C/T:",
+                "preview.cpuCt" => "CPU cores/threads:",
                 "preview.ramUsage" => "RAM usage:",
                 "preview.ramUsed" => "RAM used:",
                 "preview.gpuUsage" => "GPU usage:",
                 "preview.gpuTemp" => "GPU temp:",
-                "preview.netDown" => "Net down:",
-                "preview.netUp" => "Net up:",
+                "preview.netDown" => "Net download:",
+                "preview.netUp" => "Net upload:",
                 "preview.disks" => "Disks:",
                 "preview.power" => "Power:",
                 "preview.monitorState" => "Monitor state:",
-                "preview.displaySleep" => "Display sleep req:",
+                "preview.displaySleep" => "Display sleep request:",
                 "preview.packet" => "Packet:",
                 "lang.czech" => "Czech",
                 "lang.english" => "English",
@@ -1505,89 +1738,89 @@ internal sealed class MainForm : Form
         return key switch
         {
             "app.title" => "PC Monitor Host (ESP32)",
-            "label.com" => "COM Port:",
+            "label.com" => "COM port:",
             "label.baud" => "Rychlost:",
             "label.interval" => "Interval (ms):",
             "button.refresh" => "Obnovit porty",
-            "button.connect" => "Pripojit",
+            "button.connect" => "Připojit",
             "button.disconnect" => "Odpojit",
-            "button.toggleLog" => "📋",
+            "button.toggleLog" => "📋 Log",
             "settings.language" => "Jazyk:",
-            "settings.defaultCom" => "Vychozi COM:",
-            "settings.startWithWindows" => "Spoustet s Windows",
-            "settings.sleepWhenMonitorsOff" => "Uspat ESP displej pri vypnutem monitoru",
-            "settings.autoReconnect" => "Auto pripojeni",
-            "settings.lowPowerWhenIdle" => "Low power pri neaktivite",
+            "settings.defaultCom" => "Výchozí COM:",
+            "settings.startWithWindows" => "Spouštět s Windows",
+            "settings.sleepWhenMonitorsOff" => "Uspat ESP displej při vypnutém monitoru",
+            "settings.autoReconnect" => "Automaticky připojit",
+            "settings.lowPowerWhenIdle" => "Úsporný režim při neaktivitě",
             "settings.idleSeconds" => "Neaktivita (s):",
-            "settings.lowPowerInterval" => "Low power interval (ms):",
-            "settings.cpuTempPref" => "CPU teplota senzor:",
-            "settings.gpuTempPref" => "GPU teplota senzor:",
-            "settings.save" => "Ulozit nastaveni",
-            "group.preview" => "Aktualni telemetrie",
+            "settings.lowPowerInterval" => "Interval úspory (ms):",
+            "settings.cpuTempPref" => "Senzor CPU teploty:",
+            "settings.gpuTempPref" => "Senzor GPU teploty:",
+            "settings.save" => "Uložit nastavení",
+            "group.preview" => "Aktuální telemetrie",
             "group.log" => "Log",
             "status.title" => "Stav:",
-            "status.lastSend" => "Posledni odeslani:",
-            "status.lastAck" => "Posledni ACK:",
+            "status.lastSend" => "Poslední odeslání:",
+            "status.lastAck" => "Poslední ACK:",
             "status.sampleMs" => "Vzorek (ms):",
             "status.disconnected" => "Odpojeno",
-            "status.connected" => "Pripojeno k {0} @ {1}",
+            "status.connected" => "Připojeno k {0} @ {1}",
             "status.never" => "Nikdy",
             "status.na" => "N/A",
-            "tray.open" => "Otevrit",
-            "tray.exit" => "Ukoncit",
+            "tray.open" => "Otevřít",
+            "tray.exit" => "Ukončit",
             "tray.title" => "PC Monitor Host",
-            "tray.running" => "Aplikace bezi na pozadi. Dvojklik na ikonu ji obnovi.",
-            "msg.selectCom" => "Vyber COM port.",
-            "msg.portRequiredTitle" => "Port je povinny",
-            "msg.connectionFailed" => "Pripojeni selhalo",
-            "msg.settingsSaved" => "Nastaveni ulozeno.",
-            "msg.settingsTitle" => "Nastaveni",
-            "log.tipAdmin" => "Tip: Spust aplikaci jako administrator pro presnejsi CPU teploty z LibreHardwareMonitor.",
+            "tray.running" => "Aplikace běží na pozadí. Dvojklik na ikonu ji obnoví.",
+            "msg.selectCom" => "Vyberte COM port.",
+            "msg.portRequiredTitle" => "Port je povinný",
+            "msg.connectionFailed" => "Připojení selhalo",
+            "msg.settingsSaved" => "Nastavení uloženo.",
+            "msg.settingsTitle" => "Nastavení",
+            "log.tipAdmin" => "Tip: Spusťte aplikaci jako správce pro přesnější CPU teploty z LibreHardwareMonitor.",
             "log.portsRefreshed" => "Porty obnoveny: {0}",
-            "log.connected" => "Pripojeno: {0} @ {1}",
-            "log.connectError" => "Chyba pripojeni: {0}",
-            "log.manualDisconnect" => "Rucni odpojeni.",
-            "log.autoReconnect" => "Auto pripojeni: {0} @ {1}",
-            "log.autoReconnectError" => "Chyba auto pripojeni: {0}",
-            "log.ackTimeout" => "ACK timeout, znovu pripojuji.",
-            "log.runtimeError" => "Chyba za behu: {0}",
-            "log.settingsSaved" => "Nastaveni ulozeno.",
-            "log.startupSetError" => "Nepodarilo se nastavit spousteni s Windows: {0}",
-            "preview.cpuUsage" => "CPU vyuziti:",
+            "log.connected" => "Připojeno: {0} @ {1}",
+            "log.connectError" => "Chyba připojení: {0}",
+            "log.manualDisconnect" => "Ruční odpojení.",
+            "log.autoReconnect" => "Automatické připojení: {0} @ {1}",
+            "log.autoReconnectError" => "Chyba automatického připojení: {0}",
+            "log.ackTimeout" => "ACK timeout, znovu připojuji.",
+            "log.runtimeError" => "Chyba za běhu: {0}",
+            "log.settingsSaved" => "Nastavení uloženo.",
+            "log.startupSetError" => "Nepodařilo se nastavit spouštění s Windows: {0}",
+            "preview.cpuUsage" => "CPU využití:",
             "preview.cpuTemp" => "CPU teplota:",
-            "preview.cpuCt" => "CPU J/V:",
-            "preview.ramUsage" => "RAM vyuziti:",
-            "preview.ramUsed" => "RAM pouzito:",
-            "preview.gpuUsage" => "GPU vyuziti:",
+            "preview.cpuCt" => "CPU jádra/vlákna:",
+            "preview.ramUsage" => "RAM využití:",
+            "preview.ramUsed" => "RAM použito:",
+            "preview.gpuUsage" => "GPU využití:",
             "preview.gpuTemp" => "GPU teplota:",
-            "preview.netDown" => "Sit download:",
-            "preview.netUp" => "Sit upload:",
+            "preview.netDown" => "Síť download:",
+            "preview.netUp" => "Síť upload:",
             "preview.disks" => "Disky:",
-            "preview.power" => "Spotreba:",
+            "preview.power" => "Spotřeba:",
             "preview.monitorState" => "Stav monitoru:",
-            "preview.displaySleep" => "Pozadavek uspani:",
+            "preview.displaySleep" => "Požadavek uspání:",
             "preview.packet" => "Paket:",
-            "lang.czech" => "Cestina",
-            "lang.english" => "Anglictina",
+            "lang.czech" => "Čeština",
+            "lang.english" => "Angličtina",
             "pref.auto" => "Auto",
             "pref.cpu.package" => "Package",
-            "pref.cpu.coreMax" => "Jadro max",
-            "pref.cpu.coreAvg" => "Jadro prumer",
-            "pref.cpu.core" => "Jadro",
+            "pref.cpu.coreMax" => "Jádro max",
+            "pref.cpu.coreAvg" => "Jádro průměr",
+            "pref.cpu.core" => "Jádro",
             "pref.cpu.tdie" => "Tdie/Tctl",
             "pref.cpu.board" => "Deska",
             "pref.gpu.gpu" => "GPU",
             "pref.gpu.gpuCore" => "GPU Core",
-            "pref.gpu.core" => "Jadro",
+            "pref.gpu.core" => "Jádro",
             "pref.gpu.edge" => "Edge",
             "pref.gpu.hotspot" => "Hot Spot",
-            "misc.none" => "zadne",
+            "misc.none" => "žádné",
             "misc.yes" => "ANO",
             "misc.no" => "NE",
             "misc.displayOff" => "VYPNUTO",
             "misc.displayOn" => "ZAPNUTO",
             "misc.displayDimmed" => "ZTLUMENO",
-            "misc.displayUnknown" => "NEZNAME",
+            "misc.displayUnknown" => "NEZNÁMÝ",
             _ => key
         };
     }
