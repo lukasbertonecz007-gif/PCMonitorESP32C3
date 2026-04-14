@@ -1,0 +1,5 @@
+{
+  "sketch": "Pc monitor.ino",
+  "board": "esp32:esp32:nologo_esp32c3_super_mini",
+  "output": ".arduino/build"
+}

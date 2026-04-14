@@ -1,0 +1,10 @@
+C:\Users\Lukasbertone\Documents\Pc monitor\PcMonitorHost_EXE\PcMonitorHost.pdb
+C:\Users\Lukasbertone\Documents\Pc monitor\PcMonitorHost_EXE\fan.png
+C:\Users\Lukasbertone\Documents\Pc monitor\PcMonitorHost_EXE\D3DCompiler_47_cor3.dll
+C:\Users\Lukasbertone\Documents\Pc monitor\PcMonitorHost_EXE\PenImc_cor3.dll
+C:\Users\Lukasbertone\Documents\Pc monitor\PcMonitorHost_EXE\PresentationNative_cor3.dll
+C:\Users\Lukasbertone\Documents\Pc monitor\PcMonitorHost_EXE\vcruntime140_cor3.dll
+C:\Users\Lukasbertone\Documents\Pc monitor\PcMonitorHost_EXE\wpfgfx_cor3.dll
+C:\Users\Lukasbertone\Documents\Pc monitor\PcMonitorHost_EXE\MonoPosixHelper.dll
+C:\Users\Lukasbertone\Documents\Pc monitor\PcMonitorHost_EXE\libMonoPosixHelper.dll
+C:\Users\Lukasbertone\Documents\Pc monitor\PcMonitorHost_EXE\PcMonitorHost.exe
