@@ -1,10 +1,6 @@
 bin/
 obj/
-*.exe
-*.dll
-*.pdb
 *.user
 *.suo
 .vs/
 *.tmp
-PcMonitorHost_EXE/
