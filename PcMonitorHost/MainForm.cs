@@ -47,6 +47,7 @@ internal sealed class MainForm : Form
 
     private readonly Button _refreshPortsButton = new() { AutoSize = true };
     private readonly Button _connectButton = new() { AutoSize = true };
+    private readonly Button _toggleLogButton = new() { AutoSize = true };
 
     private readonly Label _settingsLanguageLabel = new() { AutoSize = true, Padding = new Padding(0, 7, 0, 0) };
     private readonly ComboBox _languageCombo = new()
@@ -127,6 +128,7 @@ internal sealed class MainForm : Form
 
     private readonly GroupBox _previewGroup = new() { Dock = DockStyle.Fill };
     private readonly GroupBox _logGroup = new() { Dock = DockStyle.Fill };
+    private bool _logPanelVisible = true;
 
     private readonly Timer _sendTimer = new();
     private readonly Timer _reconnectTimer = new();
@@ -284,6 +286,7 @@ internal sealed class MainForm : Form
     {
         _refreshPortsButton.Click += (_, _) => RefreshPorts();
         _connectButton.Click += (_, _) => ToggleConnection();
+        _toggleLogButton.Click += (_, _) => ToggleLogPanel();
         _intervalInput.ValueChanged += (_, _) => UpdateSendIntervalForIdle(force: true);
         _sendTimer.Tick += (_, _) => OnSendTimerTick();
         _reconnectTimer.Tick += (_, _) => TryAutoReconnect();
@@ -361,25 +364,36 @@ internal sealed class MainForm : Form
 
     private Control BuildTopControls()
     {
-        var panel = new FlowLayoutPanel
+        var panel = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
             AutoSize = true,
-            WrapContents = true,
-            FlowDirection = FlowDirection.LeftToRight
+            ColumnCount = 9,
+            RowCount = 1,
+            Margin = new Padding(0)
         };
 
-        panel.Controls.Add(_portLabel);
-        panel.Controls.Add(_portCombo);
+        // Set column widths: label (90px), combo (120px), label (90px), input (100px), etc.
+        for (int i = 0; i < 9; i++)
+        {
+            panel.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        }
 
-        panel.Controls.Add(_baudLabel);
-        panel.Controls.Add(_baudInput);
+        // Columns: portLabel (0) | portCombo (1) | baudLabel (2) | baudInput (3) | 
+        //         intervalLabel (4) | intervalInput (5) | refreshBtn (6) | connectBtn (7) | toggleLogBtn (8)
+        _portLabel.Width = 90;
+        _baudLabel.Width = 90;
+        _intervalLabel.Width = 90;
 
-        panel.Controls.Add(_intervalLabel);
-        panel.Controls.Add(_intervalInput);
-
-        panel.Controls.Add(_refreshPortsButton);
-        panel.Controls.Add(_connectButton);
+        panel.Controls.Add(_portLabel, 0, 0);
+        panel.Controls.Add(_portCombo, 1, 0);
+        panel.Controls.Add(_baudLabel, 2, 0);
+        panel.Controls.Add(_baudInput, 3, 0);
+        panel.Controls.Add(_intervalLabel, 4, 0);
+        panel.Controls.Add(_intervalInput, 5, 0);
+        panel.Controls.Add(_refreshPortsButton, 6, 0);
+        panel.Controls.Add(_connectButton, 7, 0);
+        panel.Controls.Add(_toggleLogButton, 8, 0);
 
         return panel;
     }
@@ -421,18 +435,23 @@ internal sealed class MainForm : Form
 
     private Control BuildContentArea()
     {
+        _previewGroup.Controls.Add(_previewBox);
+        _logGroup.Controls.Add(_logBox);
+        _logGroup.Visible = _logPanelVisible;
+
         var split = new SplitContainer
         {
             Dock = DockStyle.Fill,
             Orientation = Orientation.Horizontal,
-            SplitterDistance = 230
+            SplitterDistance = 230,
+            Panel2Collapsed = !_logPanelVisible
         };
-
-        _previewGroup.Controls.Add(_previewBox);
-        _logGroup.Controls.Add(_logBox);
 
         split.Panel1.Controls.Add(_previewGroup);
         split.Panel2.Controls.Add(_logGroup);
+
+        // Store reference for toggling later
+        Tag = split;
 
         return split;
     }
@@ -575,6 +594,20 @@ internal sealed class MainForm : Form
             Log(F("log.connectError", ex.Message));
             MessageBox.Show(this, ex.Message, T("msg.connectionFailed"), MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
+    }
+
+    private void ToggleLogPanel()
+    {
+        _logPanelVisible = !_logPanelVisible;
+        
+        if (Controls[0] is not TableLayoutPanel root)
+            return;
+
+        if (root.Controls[2] is not SplitContainer split)
+            return;
+
+        split.Panel2Collapsed = !_logPanelVisible;
+        _logGroup.Visible = _logPanelVisible;
     }
 
     private async void SendSample()
@@ -829,6 +862,7 @@ internal sealed class MainForm : Form
 
         _refreshPortsButton.Text = T("button.refresh");
         _connectButton.Text = _serialService.IsConnected ? T("button.disconnect") : T("button.connect");
+        _toggleLogButton.Text = T("button.toggleLog");
 
         _settingsLanguageLabel.Text = T("settings.language");
         _settingsDefaultComLabel.Text = T("settings.defaultCom");
@@ -1265,6 +1299,7 @@ internal sealed class MainForm : Form
                 "button.refresh" => "Refresh Ports",
                 "button.connect" => "Connect",
                 "button.disconnect" => "Disconnect",
+                "button.toggleLog" => "📋",
                 "settings.language" => "Language:",
                 "settings.defaultCom" => "Default COM:",
                 "settings.startWithWindows" => "Start with Windows",
@@ -1354,6 +1389,7 @@ internal sealed class MainForm : Form
             "button.refresh" => "Obnovit porty",
             "button.connect" => "Pripojit",
             "button.disconnect" => "Odpojit",
+            "button.toggleLog" => "📋",
             "settings.language" => "Jazyk:",
             "settings.defaultCom" => "Vychozi COM:",
             "settings.startWithWindows" => "Spoustet s Windows",

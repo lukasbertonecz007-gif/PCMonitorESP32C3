@@ -481,3 +481,4 @@ C:\Users\Lukasbertone\Documents\Pc monitor\PcMonitorHost\obj\Release\net8.0-wind
 C:\Users\Lukasbertone\Documents\Pc monitor\PcMonitorHost\obj\Release\net8.0-windows\win-x64\PcMonitorHost.genruntimeconfig.cache
 C:\Users\Lukasbertone\Documents\Pc monitor\PcMonitorHost\obj\Release\net8.0-windows\win-x64\ref\PcMonitorHost.dll
 C:\Users\Lukasbertone\Documents\Pc monitor\PcMonitorHost\bin\Release\net8.0-windows\win-x64\fan.png
+C:\Users\Lukasbertone\Documents\Pc monitor\PcMonitorHost\obj\Release\net8.0-windows\win-x64\PcMonitorHost.sourcelink.json
